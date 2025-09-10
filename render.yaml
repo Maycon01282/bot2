@@ -1,0 +1,16 @@
+services:
+  - type: web
+    name: latina-store-bot
+    env: python
+    plan: free
+    buildCommand: "./build.sh"
+    startCommand: "python app/main.py"
+    envVars:
+      - key: TELEGRAM_TOKEN
+        sync: false
+      - key: MERCADOPAGO_ACCESS_TOKEN
+        sync: false
+      - key: WEBHOOK_URL
+        sync: false
+      - key: PORT
+        value: 10000
