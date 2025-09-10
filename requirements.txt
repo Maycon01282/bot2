@@ -1,1 +1,10 @@
+<<<<<<< HEAD
 mercadopago==2.3.0
+=======
+python-telegram-bot==20.7
+python-dotenv==1.0.0
+requests==2.31.0
+qrcode[pil]==7.4.2
+mercadopago>=2.0.0,<3.0.0
+flask==2.3.3
+>>>>>>> 19716999490dbe4bc98bce21a264b38da2c1878d
