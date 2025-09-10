@@ -2,7 +2,7 @@ import os
 import logging
 from dotenv import load_dotenv
 from telegram import Update, ReplyKeyboardMarkup, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import Updater, CommandHandler, MessageHandler, filters, CallbackContext, CallbackQueryHandler
+from telegram.ext import Application, CommandHandler, MessageHandler, filters, CallbackContext, CallbackQueryHandler
 
 # Carregar variáveis de ambiente
 load_dotenv()
@@ -15,33 +15,33 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # Handlers
-def start(update: Update, context: CallbackContext):
+async def start(update: Update, context: CallbackContext):
     keyboard = [
         ['👤 Perfil', '💳 Adicionar Saldo'],
         ['📞 Suporte', '📝 Termos de Uso']
     ]
     reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
     
-    update.message.reply_text(
+    await update.message.reply_text(
         "🌟 *Latina Store | Telas Streaming* 🌟\n\n"
         "Bem-vindo à melhor plataforma de streaming!",
         parse_mode='Markdown',
         reply_markup=reply_markup
     )
 
-def handle_message(update: Update, context: CallbackContext):
+async def handle_message(update: Update, context: CallbackContext):
     text = update.message.text
     
     if text == '👤 Perfil':
-        show_profile(update, context)
+        await show_profile(update, context)
     elif text == '💳 Adicionar Saldo':
-        add_balance(update, context)
+        await add_balance(update, context)
     elif text == '📞 Suporte':
-        update.message.reply_text("📞 Suporte: contato@latinastore.com")
+        await update.message.reply_text("📞 Suporte: contato@latinastore.com")
     elif text == '📝 Termos de Uso':
-        update.message.reply_text("Leia nossos termos em: ...")
+        await update.message.reply_text("Leia nossos termos em: ...")
 
-def show_profile(update: Update, context: CallbackContext):
+async def show_profile(update: Update, context: CallbackContext):
     profile_text = (
         "👤 *Seu Perfil*\n\n"
         "• *Nome:* Dog Dos Links\n"
@@ -50,9 +50,9 @@ def show_profile(update: Update, context: CallbackContext):
         "• *Pontos de Indicação:* 0.00\n"
         "• *Pessoas indicadas:* 0"
     )
-    update.message.reply_text(profile_text, parse_mode='Markdown')
+    await update.message.reply_text(profile_text, parse_mode='Markdown')
 
-def add_balance(update: Update, context: CallbackContext):
+async def add_balance(update: Update, context: CallbackContext):
     keyboard = [
         [InlineKeyboardButton("R$ 10,00", callback_data="pay_10")],
         [InlineKeyboardButton("R$ 20,00", callback_data="pay_20")],
@@ -61,16 +61,16 @@ def add_balance(update: Update, context: CallbackContext):
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
     
-    update.message.reply_text(
+    await update.message.reply_text(
         "💳 *Adicionar Saldo*\n\nEscolha o valor:",
         parse_mode='Markdown',
         reply_markup=reply_markup
     )
 
-def handle_callback(update: Update, context: CallbackContext):
+async def handle_callback(update: Update, context: CallbackContext):
     query = update.callback_query
-    query.answer()
-    query.edit_message_text(text=f"Opção selecionada: {query.data}")
+    await query.answer()
+    await query.edit_message_text(text=f"Opção selecionada: {query.data}")
 
 def main():
     # Obter token do bot
@@ -80,18 +80,16 @@ def main():
         logger.error("Token do Telegram não encontrado!")
         return
 
-    # Criar updater
-    updater = Updater(TOKEN)  # Removido use_context=True
-    dp = updater.dispatcher
+    # Criar Application usando a nova API
+    application = Application.builder().token(TOKEN).build()
 
     # Adicionar handlers
-    dp.add_handler(CommandHandler("start", start))
-    dp.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
-    dp.add_handler(CallbackQueryHandler(handle_callback))
+    application.add_handler(CommandHandler("start", start))
+    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
+    application.add_handler(CallbackQueryHandler(handle_callback))
 
     # Iniciar o bot
-    updater.start_polling()
-    updater.idle()
+    application.run_polling()
 
 if __name__ == '__main__':
     main()
