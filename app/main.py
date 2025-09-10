@@ -81,7 +81,7 @@ def main():
         return
 
     # Criar updater
-    updater = Updater(TOKEN, use_context=True)
+    updater = Updater(TOKEN)  # Removido use_context=True
     dp = updater.dispatcher
 
     # Adicionar handlers
