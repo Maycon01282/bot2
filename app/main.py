@@ -86,7 +86,7 @@ def main():
 
     # Adicionar handlers
     dp.add_handler(CommandHandler("start", start))
-    dp.add_handler(MessageHandler(Filters.text & ~Filters.command, handle_message))
+    dp.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
     dp.add_handler(CallbackQueryHandler(handle_callback))
 
     # Iniciar o bot
