@@ -1,18 +1,9 @@
 services:
   - type: web
-    name: bot-health-check
+    name: telegram-bot-webhook
     env: python
     buildCommand: pip install -r requirements.txt
-    startCommand: python health_check.py
-    envVars:
-      - key: PYTHON_VERSION
-        value: 3.11.8
-
-  - type: worker
-    name: telegram-bot
-    env: python
-    buildCommand: pip install -r requirements.txt
-    startCommand: python app/main.py
+    startCommand: gunicorn app.main:app
     envVars:
       - key: PYTHON_VERSION
         value: 3.11.8
@@ -20,3 +11,7 @@ services:
         sync: false
       - key: MERCADOPAGO_ACCESS_TOKEN
         sync: false
+      - key: WEBHOOK_URL
+        fromGroup: false
+        generateValue: true
+        value: https://${RENDER_SERVICE_NAME}.onrender.com
