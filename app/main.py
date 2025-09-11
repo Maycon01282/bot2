@@ -1,5 +1,6 @@
 import os
 import logging
+import asyncio
 from dotenv import load_dotenv
 from telegram import Update, ReplyKeyboardMarkup, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, CallbackContext, CallbackQueryHandler
@@ -109,12 +110,19 @@ async def webhook():
 def health_check():
     return "Bot está rodando via webhook!"
 
-# Configurar webhook diretamente (sem before_first_request)
-webhook_url = os.getenv('WEBHOOK_URL')
-if webhook_url:
-    application.bot.set_webhook(url=f"{webhook_url}/webhook")
-    logger.info(f"Webhook configurado para: {webhook_url}/webhook")
+async def configure_webhook():
+    webhook_url = os.getenv('WEBHOOK_URL')
+    if webhook_url:
+        await application.bot.set_webhook(url=f"{webhook_url}/webhook")
+        logger.info(f"Webhook configurado para: {webhook_url}/webhook")
+    else:
+        logger.error("Variável WEBHOOK_URL não encontrada!")
 
+# Configurar webhook ao iniciar
 if __name__ == '__main__':
+    # Executar a configuração do webhook de forma assíncrona
+    loop = asyncio.get_event_loop()
+    loop.run_until_complete(configure_webhook())
+    
     port = int(os.environ.get('PORT', 5000))
     app.run(host='0.0.0.0', port=port)
