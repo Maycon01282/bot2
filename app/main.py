@@ -82,6 +82,7 @@ def setup_application():
     if not TOKEN:
         raise ValueError("Token do Telegram não encontrado!")
     
+    # Usar ApplicationBuilder sem criar Updater (evita o erro)
     application = Application.builder().token(TOKEN).build()
     
     # Adicionar handlers
