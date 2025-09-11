@@ -3,6 +3,7 @@ import logging
 from dotenv import load_dotenv
 from telegram import Update, ReplyKeyboardMarkup, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, CallbackContext, CallbackQueryHandler
+from flask import Flask, request
 
 # Carregar variáveis de ambiente
 load_dotenv()
@@ -14,7 +15,10 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# Handlers do Telegram (mantenha os mesmos handlers que você já tinha)
+# Inicializar Flask
+app = Flask(__name__)
+
+# Handlers do Telegram
 async def start(update: Update, context: CallbackContext):
     keyboard = [
         ['👤 Perfil', '💳 Adicionar Saldo'],
@@ -72,25 +76,53 @@ async def handle_callback(update: Update, context: CallbackContext):
     await query.answer()
     await query.edit_message_text(text=f"Opção selecionada: {query.data}")
 
-def main():
-    # Obter token do bot
+# Configurar aplicação do Telegram
+def setup_application():
     TOKEN = os.getenv('TELEGRAM_TOKEN')
-    
     if not TOKEN:
-        logger.error("Token do Telegram não encontrado!")
-        return
-
-    # Criar Application usando a nova API
+        raise ValueError("Token do Telegram não encontrado!")
+    
     application = Application.builder().token(TOKEN).build()
-
+    
     # Adicionar handlers
     application.add_handler(CommandHandler("start", start))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
     application.add_handler(CallbackQueryHandler(handle_callback))
+    
+    return application
 
-    # Iniciar o bot com polling
-    logger.info("Iniciando bot...")
-    application.run_polling()
+# Criar aplicação
+application = setup_application()
+
+# Rota para webhook
+@app.route('/webhook', methods=['POST'])
+async def webhook():
+    if request.headers.get('content-type') == 'application/json':
+        json_data = request.get_json(force=True)
+        update = Update.de_json(json_data, application.bot)
+        await application.process_update(update)
+        return 'ok'
+    return 'Bad Request', 400
+
+# Rota para health check
+@app.route('/')
+def health_check():
+    return "Bot está rodando via webhook!"
+
+# Configurar webhook no startup
+@app.before_first_request
+def configure_webhook():
+    webhook_url = os.getenv('WEBHOOK_URL')
+    if webhook_url:
+        # Define a URL do webhook
+        application.bot.set_webhook(url=f"{webhook_url}/webhook")
+        logger.info(f"Webhook configurado para: {webhook_url}/webhook")
 
 if __name__ == '__main__':
-    main()
+    port = int(os.environ.get('PORT', 5000))
+    # Configurar webhook ao iniciar a aplicação
+    webhook_url = os.getenv('WEBHOOK_URL')
+    if webhook_url:
+        application.bot.set_webhook(url=f"{webhook_url}/webhook")
+        logger.info(f"Webhook configurado para: {webhook_url}/webhook")
+    app.run(host='0.0.0.0', port=port)
