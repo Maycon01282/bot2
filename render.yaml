@@ -1,16 +1,22 @@
 services:
   - type: web
-    name: latina-store-bot
+    name: bot-health-check
     env: python
-    plan: free
-    buildCommand: "./build.sh"
-    startCommand: "python app/main.py"
+    buildCommand: pip install -r requirements.txt
+    startCommand: python health_check.py
     envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.8
+
+  - type: worker
+    name: telegram-bot
+    env: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: python app/main.py
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.8
       - key: TELEGRAM_TOKEN
         sync: false
       - key: MERCADOPAGO_ACCESS_TOKEN
         sync: false
-      - key: WEBHOOK_URL
-        sync: false
-      - key: PORT
-        value: 10000
