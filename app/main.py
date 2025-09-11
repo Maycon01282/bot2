@@ -3,6 +3,7 @@ import logging
 from dotenv import load_dotenv
 from telegram import Update, ReplyKeyboardMarkup, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, CallbackContext, CallbackQueryHandler
+from flask import Flask
 
 # Carregar variáveis de ambiente
 load_dotenv()
@@ -14,7 +15,14 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# Handlers
+# Inicializar Flask para health checks
+app = Flask(__name__)
+
+@app.route('/')
+def home():
+    return "Bot está rodando!"
+
+# Handlers do Telegram
 async def start(update: Update, context: CallbackContext):
     keyboard = [
         ['👤 Perfil', '💳 Adicionar Saldo'],
@@ -88,8 +96,19 @@ def main():
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
     application.add_handler(CallbackQueryHandler(handle_callback))
 
-    # Iniciar o bot
+    # Iniciar o bot com polling
+    logger.info("Iniciando bot...")
     application.run_polling()
 
 if __name__ == '__main__':
+    # Obter porta do Render (usando padrão 5000 se não definida)
+    port = int(os.environ.get('PORT', 5000))
+    
+    # Executar Flask em thread separada para health checks
+    from threading import Thread
+    flask_thread = Thread(target=lambda: app.run(host='0.0.0.0', port=port, debug=False, use_reloader=False))
+    flask_thread.daemon = True
+    flask_thread.start()
+    
+    # Iniciar bot principal
     main()
