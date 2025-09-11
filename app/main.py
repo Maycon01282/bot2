@@ -82,7 +82,6 @@ def setup_application():
     if not TOKEN:
         raise ValueError("Token do Telegram não encontrado!")
     
-    # Usar ApplicationBuilder sem criar Updater (evita o erro)
     application = Application.builder().token(TOKEN).build()
     
     # Adicionar handlers
@@ -110,20 +109,12 @@ async def webhook():
 def health_check():
     return "Bot está rodando via webhook!"
 
-# Configurar webhook no startup
-@app.before_first_request
-def configure_webhook():
-    webhook_url = os.getenv('WEBHOOK_URL')
-    if webhook_url:
-        # Define a URL do webhook
-        application.bot.set_webhook(url=f"{webhook_url}/webhook")
-        logger.info(f"Webhook configurado para: {webhook_url}/webhook")
+# Configurar webhook diretamente (sem before_first_request)
+webhook_url = os.getenv('WEBHOOK_URL')
+if webhook_url:
+    application.bot.set_webhook(url=f"{webhook_url}/webhook")
+    logger.info(f"Webhook configurado para: {webhook_url}/webhook")
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
-    # Configurar webhook ao iniciar a aplicação
-    webhook_url = os.getenv('WEBHOOK_URL')
-    if webhook_url:
-        application.bot.set_webhook(url=f"{webhook_url}/webhook")
-        logger.info(f"Webhook configurado para: {webhook_url}/webhook")
     app.run(host='0.0.0.0', port=port)
