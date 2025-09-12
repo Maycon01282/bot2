@@ -1,6 +1,6 @@
 from flask import Flask, request, jsonify
-from telegram import Update
-from telegram.ext import Application, CommandHandler, ContextTypes
+from telegram import Update, Bot
+from telegram.ext import Dispatcher, CommandHandler, MessageHandler, Filters, CallbackContext
 import os
 import logging
 from mercadopago import SDK
@@ -10,25 +10,42 @@ app = Flask(__name__)
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Configurações
+# Configurações - com verificação de variáveis de ambiente
 TELEGRAM_TOKEN = os.environ.get('TELEGRAM_TOKEN')
 MP_ACCESS_TOKEN = os.environ.get('MP_ACCESS_TOKEN')
 
-# Inicializar Mercado Pago
-mercadopago = SDK(MP_ACCESS_TOKEN)
+# Verificar se as variáveis de ambiente estão carregadas corretamente
+if not TELEGRAM_TOKEN:
+    logger.error("TELEGRAM_TOKEN não encontrado nas variáveis de ambiente")
+    raise ValueError("TELEGRAM_TOKEN não encontrado")
 
-# Criar aplicação do Telegram
-telegram_app = Application.builder().token(TELEGRAM_TOKEN).build()
+if not MP_ACCESS_TOKEN:
+    logger.error("MP_ACCESS_TOKEN não encontrado nas variáveis de ambiente")
+    raise ValueError("MP_ACCESS_TOKEN não encontrado")
+
+logger.info(f"TELEGRAM_TOKEN: {TELEGRAM_TOKEN[:10]}...")  # Log parcial por segurança
+logger.info(f"MP_ACCESS_TOKEN: {MP_ACCESS_TOKEN[:10]}...")  # Log parcial por segurança
+
+# Inicializar Mercado Pago
+try:
+    mercadopago = SDK(MP_ACCESS_TOKEN)
+    logger.info("Mercado Pago SDK inicializado com sucesso")
+except Exception as e:
+    logger.error(f"Erro ao inicializar Mercado Pago SDK: {e}")
+    raise
+
+# Criar bot do Telegram
+bot = Bot(token=TELEGRAM_TOKEN)
 
 # Handlers
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+def start(update: Update, context: CallbackContext) -> None:
     user = update.effective_user
-    await update.message.reply_text(
+    update.message.reply_text(
         f"Olá {user.first_name}! 👋\n\n"
         "Bem-vindo à nossa loja! Use /produtos para ver nossos produtos."
     )
 
-async def list_products(update: Update, context: ContextTypes.DEFAULT_TYPE):
+def list_products(update: Update, context: CallbackContext) -> None:
     products = [
         {"name": "Produto 1", "price": 50.00},
         {"name": "Produto 2", "price": 75.00},
@@ -40,9 +57,9 @@ async def list_products(update: Update, context: ContextTypes.DEFAULT_TYPE):
         message += f"{i}. {product['name']} - R$ {product['price']:.2f}\n"
     
     message += "\nPara comprar, digite /comprar"
-    await update.message.reply_text(message)
+    update.message.reply_text(message)
 
-async def create_preference(update: Update, context: ContextTypes.DEFAULT_TYPE):
+def create_preference(update: Update, context: CallbackContext) -> None:
     try:
         preference_data = {
             "items": [{
@@ -61,18 +78,13 @@ async def create_preference(update: Update, context: ContextTypes.DEFAULT_TYPE):
         preference = mercadopago.preference().create(preference_data)
         payment_url = preference["response"]["init_point"]
         
-        await update.message.reply_text(
+        update.message.reply_text(
             f"💳 Para finalizar sua compra, acesse:\n{payment_url}"
         )
         
     except Exception as e:
         logger.error(f"Erro: {e}")
-        await update.message.reply_text("❌ Ocorreu um erro.")
-
-# Registrar handlers
-telegram_app.add_handler(CommandHandler("start", start))
-telegram_app.add_handler(CommandHandler("produtos", list_products))
-telegram_app.add_handler(CommandHandler("comprar", create_preference))
+        update.message.reply_text("❌ Ocorreu um erro.")
 
 # Rotas Flask
 @app.route('/webhook', methods=['POST'])
@@ -86,13 +98,23 @@ def webhook():
         return jsonify({"status": "error"}), 500
 
 @app.route('/webhook-telegram', methods=['POST'])
-async def webhook_telegram():
+def webhook_telegram():
     try:
-        update = Update.de_json(request.get_json(force=True), telegram_app.bot)
-        await telegram_app.process_update(update)
+        # Criar dispatcher para processar a atualização
+        dispatcher = Dispatcher(bot, None, workers=4)
+        
+        # Registrar handlers
+        dispatcher.add_handler(CommandHandler("start", start))
+        dispatcher.add_handler(CommandHandler("produtos", list_products))
+        dispatcher.add_handler(CommandHandler("comprar", create_preference))
+        
+        # Processar a atualização
+        update = Update.de_json(request.get_json(force=True), bot)
+        dispatcher.process_update(update)
+        
         return jsonify({"status": "success"}), 200
     except Exception as e:
-        logger.error(f"Erro: {e}")
+        logger.error(f"Erro no webhook do Telegram: {e}")
         return jsonify({"status": "error"}), 500
 
 @app.route('/')
