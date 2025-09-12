@@ -33,7 +33,6 @@ def start(update: Update, context: CallbackContext) -> None:
 
 # Handler para listar produtos
 def list_products(update: Update, context: CallbackContext) -> None:
-    # Exemplo de produtos - adapte conforme necessário
     products = [
         {"name": "Produto 1", "price": 50.00},
         {"name": "Produto 2", "price": 75.00},
@@ -50,7 +49,6 @@ def list_products(update: Update, context: CallbackContext) -> None:
 # Handler para criar preferência de pagamento
 def create_preference(update: Update, context: CallbackContext) -> None:
     try:
-        # Lógica para criar preferência no Mercado Pago
         preference_data = {
             "items": [
                 {
@@ -86,13 +84,9 @@ def webhook():
         data = request.json
         logger.info(f"Webhook recebido: {data}")
         
-        # Processar notificação de pagamento
         if data.get('type') == 'payment':
             payment_id = data['data']['id']
             payment_info = mercadopago.payment().get(payment_id)
-            
-            # Lógica para atualizar status do pedido
-            # (implemente conforme sua necessidade)
             
         return jsonify({"status": "success"}), 200
     except Exception as e:
@@ -106,7 +100,6 @@ def webhook_telegram():
         update = Update.de_json(request.get_json(), bot)
         dispatcher = Dispatcher(bot, None, workers=0)
         
-        # Registra os handlers
         dispatcher.add_handler(CommandHandler("start", start))
         dispatcher.add_handler(CommandHandler("produtos", list_products))
         dispatcher.add_handler(CommandHandler("comprar", create_preference))
@@ -117,7 +110,7 @@ def webhook_telegram():
         logger.error(f"Erro no webhook do Telegram: {e}")
         return jsonify({"status": "error"}), 500
 
-# Rota inicial para verificar se o bot está funcionando
+# Rota inicial
 @app.route('/')
 def index():
     return "Bot do Telegram está funcionando!"
