@@ -1,128 +1,127 @@
+from flask import Flask, request, jsonify
+from telegram import Update, Bot
+from telegram.ext import Dispatcher, CommandHandler, MessageHandler, Filters, CallbackContext
 import os
 import logging
-import asyncio
-from dotenv import load_dotenv
-from telegram import Update, ReplyKeyboardMarkup, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import Application, CommandHandler, MessageHandler, filters, CallbackContext, CallbackQueryHandler
-from flask import Flask, request
+from mercadopago import SDK
+import json
 
-# Carregar variáveis de ambiente
-load_dotenv()
-
-# Configurar logging
-logging.basicConfig(
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    level=logging.INFO
-)
+# Configuração inicial
+app = Flask(__name__)
+logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Inicializar Flask
-app = Flask(__name__)
+# Configurações do Telegram
+TELEGRAM_TOKEN = os.environ.get('TELEGRAM_TOKEN')
+bot = Bot(token=TELEGRAM_TOKEN)
 
-# Handlers do Telegram
-async def start(update: Update, context: CallbackContext):
-    keyboard = [
-        ['👤 Perfil', '💳 Adicionar Saldo'],
-        ['📞 Suporte', '📝 Termos de Uso']
+# Configurações do Mercado Pago
+MP_ACCESS_TOKEN = os.environ.get('MP_ACCESS_TOKEN')
+mercadopago = SDK(MP_ACCESS_TOKEN)
+
+# Handler para o comando /start
+def start(update: Update, context: CallbackContext) -> None:
+    user = update.effective_user
+    update.message.reply_text(
+        f"Olá {user.first_name}! 👋\n\n"
+        "Bem-vindo à nossa loja! Aqui você pode:\n"
+        "• Ver nossos produtos\n"
+        "• Fazer pedidos\n"
+        "• Pagar com Mercado Pago\n\n"
+        "Use /produtos para ver o que temos disponível."
+    )
+
+# Handler para listar produtos
+def list_products(update: Update, context: CallbackContext) -> None:
+    # Exemplo de produtos - adapte conforme necessário
+    products = [
+        {"name": "Produto 1", "price": 50.00},
+        {"name": "Produto 2", "price": 75.00},
+        {"name": "Produto 3", "price": 100.00}
     ]
-    reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
     
-    await update.message.reply_text(
-        "🌟 *Latina Store | Telas Streaming* 🌟\n\n"
-        "Bem-vindo à melhor plataforma de streaming!",
-        parse_mode='Markdown',
-        reply_markup=reply_markup
-    )
-
-async def handle_message(update: Update, context: CallbackContext):
-    text = update.message.text
+    message = "📦 Nossos Produtos:\n\n"
+    for i, product in enumerate(products, 1):
+        message += f"{i}. {product['name']} - R$ {product['price']:.2f}\n"
     
-    if text == '👤 Perfil':
-        await show_profile(update, context)
-    elif text == '💳 Adicionar Saldo':
-        await add_balance(update, context)
-    elif text == '📞 Suporte':
-        await update.message.reply_text("📞 Suporte: contato@latinastore.com")
-    elif text == '📝 Termos de Uso':
-        await update.message.reply_text("Leia nossos termos em: ...")
+    message += "\nPara comprar, digite /comprar seguido do número do produto."
+    update.message.reply_text(message)
 
-async def show_profile(update: Update, context: CallbackContext):
-    profile_text = (
-        "👤 *Seu Perfil*\n\n"
-        "• *Nome:* Dog Dos Links\n"
-        "• *ID:* 725009062\n"
-        "• *Saldo Atual:* R$0.00\n"
-        "• *Pontos de Indicação:* 0.00\n"
-        "• *Pessoas indicadas:* 0"
-    )
-    await update.message.reply_text(profile_text, parse_mode='Markdown')
+# Handler para criar preferência de pagamento
+def create_preference(update: Update, context: CallbackContext) -> None:
+    try:
+        # Lógica para criar preferência no Mercado Pago
+        preference_data = {
+            "items": [
+                {
+                    "title": "Produto Teste",
+                    "quantity": 1,
+                    "unit_price": 100.00
+                }
+            ],
+            "back_urls": {
+                "success": "https://seu-site.com/success",
+                "failure": "https://seu-site.com/failure",
+                "pending": "https://seu-site.com/pending"
+            },
+            "auto_return": "approved"
+        }
+        
+        preference = mercadopago.preference().create(preference_data)
+        payment_url = preference["response"]["init_point"]
+        
+        update.message.reply_text(
+            f"💳 Para finalizar sua compra, acesse:\n{payment_url}\n\n"
+            "Após o pagamento, você receberá a confirmação aqui mesmo!"
+        )
+        
+    except Exception as e:
+        logger.error(f"Erro ao criar preferência: {e}")
+        update.message.reply_text("❌ Ocorreu um erro ao processar sua solicitação.")
 
-async def add_balance(update: Update, context: CallbackContext):
-    keyboard = [
-        [InlineKeyboardButton("R$ 10,00", callback_data="pay_10")],
-        [InlineKeyboardButton("R$ 20,00", callback_data="pay_20")],
-        [InlineKeyboardButton("R$ 50,00", callback_data="pay_50")],
-        [InlineKeyboardButton("R$ 100,00", callback_data="pay_100")],
-    ]
-    reply_markup = InlineKeyboardMarkup(keyboard)
-    
-    await update.message.reply_text(
-        "💳 *Adicionar Saldo*\n\nEscolha o valor:",
-        parse_mode='Markdown',
-        reply_markup=reply_markup
-    )
-
-async def handle_callback(update: Update, context: CallbackContext):
-    query = update.callback_query
-    await query.answer()
-    await query.edit_message_text(text=f"Opção selecionada: {query.data}")
-
-# Configurar aplicação do Telegram
-def setup_application():
-    TOKEN = os.getenv('TELEGRAM_TOKEN')
-    if not TOKEN:
-        raise ValueError("Token do Telegram não encontrado!")
-    
-    application = Application.builder().token(TOKEN).build()
-    
-    # Adicionar handlers
-    application.add_handler(CommandHandler("start", start))
-    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
-    application.add_handler(CallbackQueryHandler(handle_callback))
-    
-    return application
-
-# Criar aplicação
-application = setup_application()
-
-# Rota para webhook
+# Handler para webhook do Mercado Pago
 @app.route('/webhook', methods=['POST'])
-async def webhook():
-    if request.headers.get('content-type') == 'application/json':
-        json_data = request.get_json(force=True)
-        update = Update.de_json(json_data, application.bot)
-        await application.process_update(update)
-        return 'ok'
-    return 'Bad Request', 400
+def webhook():
+    try:
+        data = request.json
+        logger.info(f"Webhook recebido: {data}")
+        
+        # Processar notificação de pagamento
+        if data.get('type') == 'payment':
+            payment_id = data['data']['id']
+            payment_info = mercadopago.payment().get(payment_id)
+            
+            # Lógica para atualizar status do pedido
+            # (implemente conforme sua necessidade)
+            
+        return jsonify({"status": "success"}), 200
+    except Exception as e:
+        logger.error(f"Erro no webhook: {e}")
+        return jsonify({"status": "error"}), 500
 
-# Rota para health check
+# Handler para mensagens do Telegram
+@app.route('/webhook-telegram', methods=['POST'])
+def webhook_telegram():
+    try:
+        update = Update.de_json(request.get_json(), bot)
+        dispatcher = Dispatcher(bot, None, workers=0)
+        
+        # Registra os handlers
+        dispatcher.add_handler(CommandHandler("start", start))
+        dispatcher.add_handler(CommandHandler("produtos", list_products))
+        dispatcher.add_handler(CommandHandler("comprar", create_preference))
+        
+        dispatcher.process_update(update)
+        return jsonify({"status": "success"}), 200
+    except Exception as e:
+        logger.error(f"Erro no webhook do Telegram: {e}")
+        return jsonify({"status": "error"}), 500
+
+# Rota inicial para verificar se o bot está funcionando
 @app.route('/')
-def health_check():
-    return "Bot está rodando via webhook!"
+def index():
+    return "Bot do Telegram está funcionando!"
 
-async def configure_webhook():
-    webhook_url = os.getenv('WEBHOOK_URL')
-    if webhook_url:
-        await application.bot.set_webhook(url=f"{webhook_url}/webhook")
-        logger.info(f"Webhook configurado para: {webhook_url}/webhook")
-    else:
-        logger.error("Variável WEBHOOK_URL não encontrada!")
-
-# Configurar webhook ao iniciar
 if __name__ == '__main__':
-    # Executar a configuração do webhook de forma assíncrona
-    loop = asyncio.get_event_loop()
-    loop.run_until_complete(configure_webhook())
-    
     port = int(os.environ.get('PORT', 5000))
-    app.run(host='0.0.0.0', port=port)
+    app.run(host='0.0.0.0', port=port, debug=False)
