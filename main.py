@@ -1,22 +1,7 @@
-import sys
-import os
-
-# Adicionar o shim do imghdr ao path antes de importar telegram
-sys.path.insert(0, os.path.dirname(__file__))
-
-# Forçar a criação do módulo imghdr se não existir
-try:
-    import imghdr
-except ImportError:
-    # Criar um módulo imghdr simulado
-    import types
-    imghdr = types.ModuleType('imghdr')
-    imghdr.what = lambda file, h=None: None
-    sys.modules['imghdr'] = imghdr
-
 from flask import Flask, request, jsonify
 from telegram import Update
 from telegram.ext import Application, CommandHandler, ContextTypes
+import os
 import logging
 from mercadopago import SDK
 
