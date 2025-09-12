@@ -1,17 +1,7 @@
 services:
   - type: web
-    name: telegram-bot-webhook
+    name: telegram-bot
     env: python
+    plan: free
     buildCommand: pip install -r requirements.txt
-    startCommand: gunicorn app.main:app
-    envVars:
-      - key: PYTHON_VERSION
-        value: 3.11.8
-      - key: TELEGRAM_TOKEN
-        sync: false
-      - key: MERCADOPAGO_ACCESS_TOKEN
-        sync: false
-      - key: WEBHOOK_URL
-        fromGroup: false
-        generateValue: true
-        value: https://${RENDER_SERVICE_NAME}.onrender.com
+    startCommand: python main.py
