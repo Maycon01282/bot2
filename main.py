@@ -116,5 +116,12 @@ def index():
     return "Bot do Telegram está funcionando!"
 
 if __name__ == '__main__':
-    port = int(os.environ.get('PORT', 5000))
+    port_str = os.environ.get('PORT', '5000')
+    # Garantir que a porta seja um número válido
+    try:
+        port = int(port_str)
+    except ValueError:
+        port = 5000  # Valor padrão se não for um número válido
+        logger.warning(f"PORT inválida: '{port_str}'. Usando porta padrão: {port}")
+    
     app.run(host='0.0.0.0', port=port, debug=False)
