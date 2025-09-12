@@ -97,7 +97,7 @@ def webhook():
 @app.route('/webhook-telegram', methods=['POST'])
 def webhook_telegram():
     try:
-        update = Update.de_json(request.get_json(), bot)
+        update = Update.de_json(request.get_json(force=True), bot)
         dispatcher = Dispatcher(bot, None, workers=0)
         
         dispatcher.add_handler(CommandHandler("start", start))
