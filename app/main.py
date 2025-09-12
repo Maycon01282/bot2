@@ -1,6 +1,7 @@
 from flask import Flask, request, jsonify
-from telegram import Update, Bot
-from telegram.ext import Dispatcher, CommandHandler, MessageHandler, Filters, CallbackContext
+from telegram import Update
+from telegram.ext import Application, CommandHandler, ContextTypes
+from telegram.constants import ParseMode
 import os
 import logging
 from mercadopago import SDK
@@ -13,16 +14,18 @@ logger = logging.getLogger(__name__)
 
 # Configurações do Telegram
 TELEGRAM_TOKEN = os.environ.get('TELEGRAM_TOKEN')
-bot = Bot(token=TELEGRAM_TOKEN)
 
 # Configurações do Mercado Pago
 MP_ACCESS_TOKEN = os.environ.get('MP_ACCESS_TOKEN')
 mercadopago = SDK(MP_ACCESS_TOKEN)
 
+# Criar aplicação do Telegram
+telegram_app = Application.builder().token(TELEGRAM_TOKEN).build()
+
 # Handler para o comando /start
-def start(update: Update, context: CallbackContext) -> None:
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     user = update.effective_user
-    update.message.reply_text(
+    await update.message.reply_text(
         f"Olá {user.first_name}! 👋\n\n"
         "Bem-vindo à nossa loja! Aqui você pode:\n"
         "• Ver nossos produtos\n"
@@ -32,7 +35,7 @@ def start(update: Update, context: CallbackContext) -> None:
     )
 
 # Handler para listar produtos
-def list_products(update: Update, context: CallbackContext) -> None:
+async def list_products(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     products = [
         {"name": "Produto 1", "price": 50.00},
         {"name": "Produto 2", "price": 75.00},
@@ -44,10 +47,10 @@ def list_products(update: Update, context: CallbackContext) -> None:
         message += f"{i}. {product['name']} - R$ {product['price']:.2f}\n"
     
     message += "\nPara comprar, digite /comprar seguido do número do produto."
-    update.message.reply_text(message)
+    await update.message.reply_text(message)
 
 # Handler para criar preferência de pagamento
-def create_preference(update: Update, context: CallbackContext) -> None:
+async def create_preference(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     try:
         preference_data = {
             "items": [
@@ -68,14 +71,19 @@ def create_preference(update: Update, context: CallbackContext) -> None:
         preference = mercadopago.preference().create(preference_data)
         payment_url = preference["response"]["init_point"]
         
-        update.message.reply_text(
+        await update.message.reply_text(
             f"💳 Para finalizar sua compra, acesse:\n{payment_url}\n\n"
             "Após o pagamento, você receberá a confirmação aqui mesmo!"
         )
         
     except Exception as e:
         logger.error(f"Erro ao criar preferência: {e}")
-        update.message.reply_text("❌ Ocorreu um erro ao processar sua solicitação.")
+        await update.message.reply_text("❌ Ocorreu um erro ao processar sua solicitação.")
+
+# Registrar handlers
+telegram_app.add_handler(CommandHandler("start", start))
+telegram_app.add_handler(CommandHandler("produtos", list_products))
+telegram_app.add_handler(CommandHandler("comprar", create_preference))
 
 # Handler para webhook do Mercado Pago
 @app.route('/webhook', methods=['POST'])
@@ -95,16 +103,12 @@ def webhook():
 
 # Handler para mensagens do Telegram
 @app.route('/webhook-telegram', methods=['POST'])
-def webhook_telegram():
+async def webhook_telegram():
     try:
-        update = Update.de_json(request.get_json(force=True), bot)
-        dispatcher = Dispatcher(bot, None, workers=0)
+        # Processar a atualização
+        update = Update.de_json(request.get_json(force=True), telegram_app.bot)
+        await telegram_app.process_update(update)
         
-        dispatcher.add_handler(CommandHandler("start", start))
-        dispatcher.add_handler(CommandHandler("produtos", list_products))
-        dispatcher.add_handler(CommandHandler("comprar", create_preference))
-        
-        dispatcher.process_update(update)
         return jsonify({"status": "success"}), 200
     except Exception as e:
         logger.error(f"Erro no webhook do Telegram: {e}")
