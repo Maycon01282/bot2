@@ -1,7 +1,22 @@
-from flask import Flask, request, jsonify
-from telegram import Update, Bot
-from telegram.ext import Dispatcher, CommandHandler, MessageHandler, Filters, CallbackContext
+import sys
 import os
+
+# Adicionar o shim do imghdr ao path antes de importar telegram
+sys.path.insert(0, os.path.dirname(__file__))
+
+# Forçar a criação do módulo imghdr se não existir
+try:
+    import imghdr
+except ImportError:
+    # Criar um módulo imghdr simulado
+    import types
+    imghdr = types.ModuleType('imghdr')
+    imghdr.what = lambda file, h=None: None
+    sys.modules['imghdr'] = imghdr
+
+from flask import Flask, request, jsonify
+from telegram import Update
+from telegram.ext import Application, CommandHandler, ContextTypes
 import logging
 from mercadopago import SDK
 
@@ -10,7 +25,7 @@ app = Flask(__name__)
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Configurações - com verificação de variáveis de ambiente
+# Configurações
 TELEGRAM_TOKEN = os.environ.get('TELEGRAM_TOKEN')
 MP_ACCESS_TOKEN = os.environ.get('MP_ACCESS_TOKEN')
 
@@ -23,8 +38,7 @@ if not MP_ACCESS_TOKEN:
     logger.error("MP_ACCESS_TOKEN não encontrado nas variáveis de ambiente")
     raise ValueError("MP_ACCESS_TOKEN não encontrado")
 
-logger.info(f"TELEGRAM_TOKEN: {TELEGRAM_TOKEN[:10]}...")  # Log parcial por segurança
-logger.info(f"MP_ACCESS_TOKEN: {MP_ACCESS_TOKEN[:10]}...")  # Log parcial por segurança
+logger.info("Variáveis de ambiente carregadas com sucesso")
 
 # Inicializar Mercado Pago
 try:
@@ -34,18 +48,18 @@ except Exception as e:
     logger.error(f"Erro ao inicializar Mercado Pago SDK: {e}")
     raise
 
-# Criar bot do Telegram
-bot = Bot(token=TELEGRAM_TOKEN)
+# Criar aplicação do Telegram
+telegram_app = Application.builder().token(TELEGRAM_TOKEN).build()
 
 # Handlers
-def start(update: Update, context: CallbackContext) -> None:
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
-    update.message.reply_text(
+    await update.message.reply_text(
         f"Olá {user.first_name}! 👋\n\n"
         "Bem-vindo à nossa loja! Use /produtos para ver nossos produtos."
     )
 
-def list_products(update: Update, context: CallbackContext) -> None:
+async def list_products(update: Update, context: ContextTypes.DEFAULT_TYPE):
     products = [
         {"name": "Produto 1", "price": 50.00},
         {"name": "Produto 2", "price": 75.00},
@@ -57,9 +71,9 @@ def list_products(update: Update, context: CallbackContext) -> None:
         message += f"{i}. {product['name']} - R$ {product['price']:.2f}\n"
     
     message += "\nPara comprar, digite /comprar"
-    update.message.reply_text(message)
+    await update.message.reply_text(message)
 
-def create_preference(update: Update, context: CallbackContext) -> None:
+async def create_preference(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         preference_data = {
             "items": [{
@@ -68,9 +82,9 @@ def create_preference(update: Update, context: CallbackContext) -> None:
                 "unit_price": 100.00
             }],
             "back_urls": {
-                "success": "https://seu-site.com/success",
-                "failure": "https://seu-site.com/failure",
-                "pending": "https://seu-site.com/pending"
+                "success": "https://your-app.onrender.com/success",
+                "failure": "https://your-app.onrender.com/failure", 
+                "pending": "https://your-app.onrender.com/pending"
             },
             "auto_return": "approved"
         }
@@ -78,40 +92,35 @@ def create_preference(update: Update, context: CallbackContext) -> None:
         preference = mercadopago.preference().create(preference_data)
         payment_url = preference["response"]["init_point"]
         
-        update.message.reply_text(
+        await update.message.reply_text(
             f"💳 Para finalizar sua compra, acesse:\n{payment_url}"
         )
         
     except Exception as e:
         logger.error(f"Erro: {e}")
-        update.message.reply_text("❌ Ocorreu um erro.")
+        await update.message.reply_text("❌ Ocorreu um erro.")
+
+# Registrar handlers
+telegram_app.add_handler(CommandHandler("start", start))
+telegram_app.add_handler(CommandHandler("produtos", list_products))
+telegram_app.add_handler(CommandHandler("comprar", create_preference))
 
 # Rotas Flask
 @app.route('/webhook', methods=['POST'])
 def webhook():
     try:
         data = request.json
-        logger.info(f"Webhook: {data}")
+        logger.info(f"Webhook recebido: {data}")
         return jsonify({"status": "success"}), 200
     except Exception as e:
-        logger.error(f"Erro: {e}")
+        logger.error(f"Erro no webhook: {e}")
         return jsonify({"status": "error"}), 500
 
 @app.route('/webhook-telegram', methods=['POST'])
-def webhook_telegram():
+async def webhook_telegram():
     try:
-        # Criar dispatcher para processar a atualização
-        dispatcher = Dispatcher(bot, None, workers=4)
-        
-        # Registrar handlers
-        dispatcher.add_handler(CommandHandler("start", start))
-        dispatcher.add_handler(CommandHandler("produtos", list_products))
-        dispatcher.add_handler(CommandHandler("comprar", create_preference))
-        
-        # Processar a atualização
-        update = Update.de_json(request.get_json(force=True), bot)
-        dispatcher.process_update(update)
-        
+        update = Update.de_json(request.get_json(force=True), telegram_app.bot)
+        await telegram_app.process_update(update)
         return jsonify({"status": "success"}), 200
     except Exception as e:
         logger.error(f"Erro no webhook do Telegram: {e}")
@@ -119,7 +128,7 @@ def webhook_telegram():
 
 @app.route('/')
 def index():
-    return "Bot funcionando!"
+    return "Bot do Telegram está funcionando!"
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
