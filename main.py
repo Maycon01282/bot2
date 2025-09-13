@@ -4,6 +4,7 @@ from telegram.ext import Application, CommandHandler, ContextTypes
 import os
 import logging
 from mercadopago import SDK
+import json
 
 # Configuração inicial
 app = Flask(__name__)
@@ -38,25 +39,31 @@ telegram_app = Application.builder().token(TELEGRAM_TOKEN).build()
 
 # Handlers
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user = update.effective_user
-    await update.message.reply_text(
-        f"Olá {user.first_name}! 👋\n\n"
-        "Bem-vindo à nossa loja! Use /produtos para ver nossos produtos."
-    )
+    try:
+        user = update.effective_user
+        await update.message.reply_text(
+            f"Olá {user.first_name}! 👋\n\n"
+            "Bem-vindo à nossa loja! Use /produtos para ver nossos produtos."
+        )
+    except Exception as e:
+        logger.error(f"Erro no handler start: {e}")
 
 async def list_products(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    products = [
-        {"name": "Produto 1", "price": 50.00},
-        {"name": "Produto 2", "price": 75.00},
-        {"name": "Produto 3", "price": 100.00}
-    ]
-    
-    message = "📦 Nossos Produtos:\n\n"
-    for i, product in enumerate(products, 1):
-        message += f"{i}. {product['name']} - R$ {product['price']:.2f}\n"
-    
-    message += "\nPara comprar, digite /comprar"
-    await update.message.reply_text(message)
+    try:
+        products = [
+            {"name": "Produto 1", "price": 50.00},
+            {"name": "Produto 2", "price": 75.00},
+            {"name": "Produto 3", "price": 100.00}
+        ]
+        
+        message = "📦 Nossos Produtos:\n\n"
+        for i, product in enumerate(products, 1):
+            message += f"{i}. {product['name']} - R$ {product['price']:.2f}\n"
+        
+        message += "\nPara comprar, digite /comprar"
+        await update.message.reply_text(message)
+    except Exception as e:
+        logger.error(f"Erro no handler list_products: {e}")
 
 async def create_preference(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
@@ -104,12 +111,21 @@ def webhook():
 @app.route('/webhook-telegram', methods=['POST'])
 async def webhook_telegram():
     try:
-        update = Update.de_json(request.get_json(force=True), telegram_app.bot)
+        # Log para verificar se a requisição está chegando
+        logger.info("Webhook do Telegram recebido")
+        
+        # Obter os dados JSON
+        json_data = request.get_json(force=True)
+        logger.info(f"Dados recebidos: {json_data}")
+        
+        # Processar a atualização
+        update = Update.de_json(json_data, telegram_app.bot)
         await telegram_app.process_update(update)
+        
         return jsonify({"status": "success"}), 200
     except Exception as e:
-        logger.error(f"Erro no webhook do Telegram: {e}")
-        return jsonify({"status": "error"}), 500
+        logger.error(f"Erro no webhook do Telegram: {e}", exc_info=True)
+        return jsonify({"status": "error", "message": str(e)}), 500
 
 @app.route('/')
 def index():
