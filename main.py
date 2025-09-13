@@ -11,14 +11,16 @@ logger = logging.getLogger(__name__)
 
 # Configurações
 TELEGRAM_TOKEN = os.environ.get('TELEGRAM_TOKEN')
+MP_ACCESS_TOKEN = os.environ.get('MP_ACCESS_TOKEN')
 
+# Verificar se as variáveis de ambiente estão carregadas corretamente
 if not TELEGRAM_TOKEN:
-    logger.error("TELEGRAM_TOKEN não encontrado nas variáveis de ambiente")
+    logger.error("TELEGRAM_TOKEN não encontrado")
     raise ValueError("TELEGRAM_TOKEN não encontrado")
 
 logger.info("Variáveis de ambiente carregadas com sucesso")
 
-# Criar aplicação do Telegram
+# Inicializar bot do Telegram
 telegram_app = Application.builder().token(TELEGRAM_TOKEN).build()
 
 # Handlers
@@ -52,7 +54,7 @@ async def list_products(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def create_preference(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         await update.message.reply_text(
-            "⚠️ Funcionalidade de compra temporariamente desativada. Estamos em manutenção."
+            "💳 Para comprar, entre em contato conosco diretamente."
         )
     except Exception as e:
         logger.error(f"Erro no handler create_preference: {e}")
@@ -62,18 +64,16 @@ telegram_app.add_handler(CommandHandler("start", start))
 telegram_app.add_handler(CommandHandler("produtos", list_products))
 telegram_app.add_handler(CommandHandler("comprar", create_preference))
 
+# Rota do webhook do Telegram
 @app.route('/webhook-telegram', methods=['POST'])
 async def webhook_telegram():
     try:
-        # Log para verificar se a requisição está chegando
-        logger.info("Webhook do Telegram recebido")
-        
         # Obter os dados JSON
-        json_data = request.get_json(force=True)
-        logger.info(f"Dados recebidos: {json_data}")
+        update_data = request.get_json(force=True)
+        logger.info(f"Dados recebidos: {update_data}")
         
         # Processar a atualização
-        update = Update.de_json(json_data, telegram_app.bot)
+        update = Update.de_json(update_data, telegram_app.bot)
         await telegram_app.process_update(update)
         
         return jsonify({"status": "success"}), 200
@@ -86,5 +86,12 @@ def index():
     return "Bot do Telegram está funcionando!"
 
 if __name__ == '__main__':
-    port = int(os.environ.get('PORT', 5000))
+    port_str = os.environ.get('PORT', '5000')
+    # Garantir que a porta seja um número válido
+    try:
+        port = int(port_str)
+    except ValueError:
+        port = 5000  # Valor padrão se não for um número válido
+        logger.warning(f"PORT inválida: '{port_str}'. Usando porta padrão: {port}")
+    
     app.run(host='0.0.0.0', port=port, debug=False)
