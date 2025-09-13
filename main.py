@@ -3,8 +3,6 @@ from telegram import Update
 from telegram.ext import Application, CommandHandler, ContextTypes
 import os
 import logging
-from mercadopago import SDK
-import json
 
 # Configuração inicial
 app = Flask(__name__)
@@ -13,26 +11,12 @@ logger = logging.getLogger(__name__)
 
 # Configurações
 TELEGRAM_TOKEN = os.environ.get('TELEGRAM_TOKEN')
-MP_ACCESS_TOKEN = os.environ.get('MP_ACCESS_TOKEN')
 
-# Verificar se as variáveis de ambiente estão carregadas corretamente
 if not TELEGRAM_TOKEN:
     logger.error("TELEGRAM_TOKEN não encontrado nas variáveis de ambiente")
     raise ValueError("TELEGRAM_TOKEN não encontrado")
 
-if not MP_ACCESS_TOKEN:
-    logger.error("MP_ACCESS_TOKEN não encontrado nas variáveis de ambiente")
-    raise ValueError("MP_ACCESS_TOKEN não encontrado")
-
 logger.info("Variáveis de ambiente carregadas com sucesso")
-
-# Inicializar Mercado Pago
-try:
-    mercadopago = SDK(MP_ACCESS_TOKEN)
-    logger.info("Mercado Pago SDK inicializado com sucesso")
-except Exception as e:
-    logger.error(f"Erro ao inicializar Mercado Pago SDK: {e}")
-    raise
 
 # Criar aplicação do Telegram
 telegram_app = Application.builder().token(TELEGRAM_TOKEN).build()
@@ -67,46 +51,16 @@ async def list_products(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def create_preference(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
-        preference_data = {
-            "items": [{
-                "title": "Produto Teste",
-                "quantity": 1,
-                "unit_price": 100.00
-            }],
-            "back_urls": {
-                "success": "https://your-app.onrender.com/success",
-                "failure": "https://your-app.onrender.com/failure", 
-                "pending": "https://your-app.onrender.com/pending"
-            },
-            "auto_return": "approved"
-        }
-        
-        preference = mercadopago.preference().create(preference_data)
-        payment_url = preference["response"]["init_point"]
-        
         await update.message.reply_text(
-            f"💳 Para finalizar sua compra, acesse:\n{payment_url}"
+            "⚠️ Funcionalidade de compra temporariamente desativada. Estamos em manutenção."
         )
-        
     except Exception as e:
-        logger.error(f"Erro: {e}")
-        await update.message.reply_text("❌ Ocorreu um erro.")
+        logger.error(f"Erro no handler create_preference: {e}")
 
 # Registrar handlers
 telegram_app.add_handler(CommandHandler("start", start))
 telegram_app.add_handler(CommandHandler("produtos", list_products))
 telegram_app.add_handler(CommandHandler("comprar", create_preference))
-
-# Rotas Flask
-@app.route('/webhook', methods=['POST'])
-def webhook():
-    try:
-        data = request.json
-        logger.info(f"Webhook recebido: {data}")
-        return jsonify({"status": "success"}), 200
-    except Exception as e:
-        logger.error(f"Erro no webhook: {e}")
-        return jsonify({"status": "error"}), 500
 
 @app.route('/webhook-telegram', methods=['POST'])
 async def webhook_telegram():
@@ -132,12 +86,5 @@ def index():
     return "Bot do Telegram está funcionando!"
 
 if __name__ == '__main__':
-    port_str = os.environ.get('PORT', '5000')
-    # Garantir que a porta seja um número válido
-    try:
-        port = int(port_str)
-    except ValueError:
-        port = 5000  # Valor padrão se não for um número válido
-        logger.warning(f"PORT inválida: '{port_str}'. Usando porta padrão: {port}")
-    
+    port = int(os.environ.get('PORT', 5000))
     app.run(host='0.0.0.0', port=port, debug=False)
